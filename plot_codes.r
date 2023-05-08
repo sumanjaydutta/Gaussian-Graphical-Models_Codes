@@ -1,0 +1,4 @@
+ #synthetic experiment
+ ggplot(data = result.df, aes(x = n, y = err, group = type )) + geom_line(aes(color = type)) + labs(title = "Recovery Error in Precision Matrix, m=150 samples",  x = "Number of nodes (n)", y = "Normalized Error (l1)") + geom_point(aes(color = type)) + labs(color = "Method") + theme(text = element_text(size = 10), plot.title = element_text(size = 10))  + coord_cartesian(ylim = c(0, 250))
+#semi-synthetic experiment
+ ggplot(data = testdata2, aes( x = n, y = m, group = type )) + geom_line(aes(color = type)) + labs(title = "Sample Complexity for Edge Recovery", x = "Number of nodes (n)", y = "Number of samples (m)") + geom_point(aes(color = type)) + labs(color = "Method") + theme(text = element_text(size = 10), plot.title = element_text(size = 10))

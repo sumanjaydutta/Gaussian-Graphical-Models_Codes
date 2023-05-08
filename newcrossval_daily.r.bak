@@ -1146,10 +1146,10 @@ walk_summable_dist = function(M) {
 walk_summable_rel = function(M) {
   return(walk_summable_dist(M) / norm(M, ))
   }
-  nifret = read.csv("niftyreturns.csv") #can be changed to see for diff no. of stocks and samples
+  nifret = read.csv("niftyreturns4.csv") #can be changed to see for diff no. of stocks and samples
 dim(nifret)
  dailyvar <- function(y) {
- dmat = y
+dmat = y
 X = apply(y, 2, as.numeric)
 X = as.matrix(X)
 # center and set to variance 1
@@ -1173,7 +1173,7 @@ cv1 = function(X, method, param, folds = 5) {
 	  
 	  #wts=calculateWeights(result)
 	  #err=calcVar(wts,X_train)
-	  one.vec = rep(1,10)
+	  one.vec = rep(1,48)
 	  top.mat = result%*%one.vec
 	  bot.val = as.numeric(t(one.vec)%*%result%*%one.vec)
 	  wts = top.mat/bot.val
@@ -1227,12 +1227,12 @@ glasso1 <- function(p){
  res_glasso = cv1(X, glasso_train, p)
  return(res_glasso) 
 }
-nmgl1 = Nelder_Mead(glasso1, 0.2, 0.0005, 0.4)
+nmgl1 = Nelder_Mead(glasso1, 5e-10, 0, Inf)
 glasso2 <- function(p){
  res_glasso = cv2(X, glasso_train, p)
  return(res_glasso) 
 }
-nmgl2 = Nelder_Mead(glasso2,  0.2, 0.0005, 0.4)
+nmgl2 = Nelder_Mead(glasso2, 5e-10, 0, Inf)
 clime_train = function(X_train, lambda) {
     my.clime((1 / nrow(X_train)) * t(X_train) %*% X_train, lambda)
   }
@@ -1240,12 +1240,12 @@ clime_train = function(X_train, lambda) {
  res_clime = cv1(X, clime_train, p)
  return(res_clime) 
 }
-nmcl1 = Nelder_Mead(clime1,0.1, 0.01,0.8)
+nmcl1 = Nelder_Mead(clime1, 5e-10, 0, Inf)
 clime2 <- function(p){
  res_clime = cv2(X, clime_train, p)
  return(res_clime) 
  }
- nmcl2 = Nelder_Mead(clime2, 0.1, 0.01,0.8)
+ nmcl2 = Nelder_Mead(clime2, 5e-10, 0, Inf)
  #mb
   mb_train = function(X_train, lambda) {
     # have symmetrization in our CV objective
@@ -1256,12 +1256,12 @@ clime2 <- function(p){
  res_mb = cv1(X, mb_train, p)
  return(res_mb) 
 }
-nmmb1 = Nelder_Mead(mb1,0.1, 0.0005, 0.4)
+nmmb1 = Nelder_Mead(mb1, 5e-10, 0, Inf)
 mb2 <- function(p){
  res_mb = cv2(X, mb_train, p)
  return(res_mb) 
 } 
-nmmb2 = Nelder_Mead(mb2,0.1, 0.0005, 0.4 )
+nmmb2 = Nelder_Mead(mb2, 5e-10, 0, Inf)
 #hybridmb
  hybrid.mb_train = function(X_train, gamma) {
     hybrid.MB(X_train, gamma)
@@ -1270,12 +1270,12 @@ nmmb2 = Nelder_Mead(mb2,0.1, 0.0005, 0.4 )
  res_hybrid.mb = cv1(X, hybrid.mb_train, p)
  return(res_hybrid.mb) 
 }
-nmhmb1 = Nelder_Mead(hybrid.mb1, 4,1,32)
+nmhmb1 = Nelder_Mead(hybrid.mb1, 5e-10, 0, Inf)
 hybrid.mb2 <- function(p){
  res_hybrid.mb = cv2(X, hybrid.mb_train, p)
  return(res_hybrid.mb) 
  }
- nmhmb2 = Nelder_Mead(hybrid.mb2,4,1,32)
+ nmhmb2 = Nelder_Mead(hybrid.mb2, 5e-10, 0, Inf)
  #greedyprune
 greedy_params = list()
 for (k in log_grid_discrete(3,24,6)) {#log_grid_discrete(3, 26, 6)) {
@@ -1299,7 +1299,7 @@ for (k in log_grid_discrete(3,24,6)) {#log_grid_discrete(3, 26, 6)) {
    for (outerparam in log_grid_discrete(3,24,6))
    {nGlobalVar = outerparam
   
-  nmgreedy1 <- Nelder_Mead(greedy1,0.05, 0.001,0.1)
+  nmgreedy1 <- Nelder_Mead(greedy1, 5e-10, 0, Inf)
   greedylist1 = list.append(greedylist1, c(outerparam, nmgreedy1$par, nmgreedy1$fval))
   }
  gl1 = c(greedylist1[[1]][3],greedylist1[[2]][3],greedylist1[[3]][3],greedylist1[[4]][3],greedylist1[[5]][3],greedylist1[[6]][3],greedylist1[[7]][3]) 
@@ -1320,7 +1320,7 @@ for (k in log_grid_discrete(3,24,6)) {#log_grid_discrete(3, 26, 6)) {
    for (outerparam in log_grid_discrete(3,24,6))
    {nGlobalVar = outerparam
   
-  nmgreedy2 <- Nelder_Mead(greedy2, 0.05, 0.001,0.1)
+  nmgreedy2 <- Nelder_Mead(greedy2, 5e-10, 0, Inf)
   greedylist2 = list.append(greedylist2, c(outerparam, nmgreedy2$par, nmgreedy2$fval))
   }
  gl2 = c(greedylist2[[1]][3],greedylist2[[2]][3],greedylist2[[3]][3],greedylist2[[4]][3],greedylist2[[5]][3],greedylist2[[6]][3],greedylist2[[7]][3]) 
@@ -1339,7 +1339,7 @@ for (k in log_grid_discrete(3,24,6)) {#log_grid_discrete(3, 26, 6)) {
  rechmb2 =  hybrid.mb_train(X,nmhmb2$par)
  recgp1 = greedy_train(X, grpr1)
  recgp2 = greedy_train(X, grpr2)
- one.vec = rep(1, 10)
+ one.vec = rep(1, 48)
  #glasso1
 top.matgl1 = recgl1%*%one.vec
 bot.valgl1 = as.numeric((t(one.vec)%*%recgl1%*%one.vec))
@@ -1381,7 +1381,7 @@ top.matgp2 = recgp2%*%one.vec
 bot.valgp2 = as.numeric((t(one.vec)%*%recgp2%*%one.vec))
 m.matgp2 = top.matgp2/bot.valgp2
 #eqwt
-eqwt = rep(1/10,10)
+eqwt = rep(1/48,48)
 dgl1 = as.matrix(dmat)%*%as.vector(m.matgl1)
 dcl1 = as.matrix(dmat)%*%as.vector(m.matcl1)
 dmb1 = as.matrix(dmat)%*%as.vector(m.matmb1)

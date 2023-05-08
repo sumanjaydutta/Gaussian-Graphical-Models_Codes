@@ -1,3 +1,5 @@
+#synthetic experiment for seeing source of errors for Shrnikage compared with GGMs
+#we compare four methods here, LW, RBLW, GReedyPrune and HybridMB
 library(rlist)
 library(glasso)
 library(MASS)
@@ -9,20 +11,12 @@ library(gurobi)
 library(viridis)
 library(ggplot2)
 library(igraph)
-library(zoo)
-library(lme4)
-library(neldermead)
+library(nlshrink)
+library(CovTools)
+library(corpcor)
+
 cl = makeCluster(4) # use 4 processes at once
 registerDoParallel(cl)
-
-# For running on the linux server with more processors
-#registerDoParallel(cores=24)
-
-# 1 is the experiment with fixed m (dropped from paper)
-# 2 is the experiment for sample complexity; the covariance matrix is chosen later in the code.
-# 3 for riboflavin experiment
-
-
 # L1 norm of matrices as vectors
 exp1_norm = function(prec1, prec2) {
   return(sum(abs(prec1 - prec2)))
@@ -1035,6 +1029,10 @@ hybrid.MB.singlenode = function(X,
   return (theta.hat)
 }
 
+
+
+
+
 hybrid.MB = function(X, gamma = 2) {
   p = dim(X)[2]
   #Theta = matrix(nrow=p,ncol=p)
@@ -1117,77 +1115,18 @@ best_hybrid.MB <-
       err = best_err
     ))
   }
-log_grid = function(a, b, k) {
-  return(exp(log(a) + (0:k) * (log(b) - log(a)) / k))
-}
 
-# This may return a list of length < k + 1 due to rounding
-log_grid_discrete = function(a, b, k) {
-  return(unique(round(log_grid(a, b, k))))
-}
-
-# test code: crossvalidate(X,function(X_train,lambda) { my.clime((1/nrow(X_train)) * t(X_train) %*% X_train,lambda)}, c(0.2,0.3,0.5))
-
-# test if a psd matrix is walk summable
-is.walk_summable = function(M) {
-  N = -abs(M)
-  diag(N) = diag(M)
-  eigs = eigen(N)$values
-  print(eigs)
-  return(!any(eigs < 0))
-}
-
-walk_summable_dist = function(M) {
-  N = -abs(M)
-  diag(N) = diag(M)
-  return(nearPD(N)$normF)
-}
-
-walk_summable_rel = function(M) {
-  return(walk_summable_dist(M) / norm(M, ))
-  }
-  nifret = read.csv("niftyreturns.csv") #can be changed to see for diff no. of stocks and samples
-dim(nifret)
- dailyvar <- function(y) {
- dmat = y
-X = apply(y, 2, as.numeric)
-X = as.matrix(X)
-# center and set to variance 1
-X = scale(X)
-num_samples = dim(X)[1]
-emp_cov = t(X) %*% X / num_samples
- n = nrow(X)
- folds = 5
+# Do an e.g. 5-fold crossvalidation
+crossvalidate = function(X, method, params, folds = 5) {
+  n = nrow(X)
   holdout = split(sample(1:n), 1:folds)
-cv1 = function(X, method, param, folds = 5) {
   #print(holdout)
-    #print(param[0])
-    #print(param[1])
-    objective = 0
-    for (test_idx in 1:folds) {
-      X_train = X[-holdout[[test_idx]], ]
-      X_test = X[holdout[[test_idx]], ]
-      result = method(X_train, param)
-      test_size = nrow(X_test)
-      #holdout_cov = (1 / test_size) * t(X_test) %*% X_test
-	  
-	  #wts=calculateWeights(result)
-	  #err=calcVar(wts,X_train)
-	  one.vec = rep(1,10)
-	  top.mat = result%*%one.vec
-	  bot.val = as.numeric(t(one.vec)%*%result%*%one.vec)
-	  wts = top.mat/bot.val
-	  variance = var(X_train%*%as.vector(wts))
-
-      # variance reduction cross-validation as in paper
-      #p = dim(holdout_cov)[1]
-      err = variance
-      objective = objective + err 
-    }
-    avgobjective = objective / folds
-  return(avgobjective)
-}
-cv2 = function(X, method, param, folds = 5) {
+  best_param = params[[1]]
+  best_obj = Inf
+  num_nz = Inf
+  
+  for (param in params) {
+    print(param)
     #print(param[0])
     #print(param[1])
     objective = 0
@@ -1212,201 +1151,84 @@ cv2 = function(X, method, param, folds = 5) {
       }
       print(err)
       objective = objective + err / p
-	   avgobjective = objective / folds
-	   }
-  return(avgobjective)
-}
-glasso_train = function(X_train, lambda) {
-# symmetrization in our CV objective. (doesn't hurt glasso performance)
-v = glasso((1 / nrow(X_train)) * t(X_train) %*% X_train, lambda)$wi
-return((v + t(v))/2)
-}
-# 1 and 2 represent our and authors cv techniques
-#glasso
-glasso1 <- function(p){
- res_glasso = cv1(X, glasso_train, p)
- return(res_glasso) 
-}
-nmgl1 = Nelder_Mead(glasso1, 0.2, 0.0005, 0.4)
-glasso2 <- function(p){
- res_glasso = cv2(X, glasso_train, p)
- return(res_glasso) 
-}
-nmgl2 = Nelder_Mead(glasso2,  0.2, 0.0005, 0.4)
-clime_train = function(X_train, lambda) {
-    my.clime((1 / nrow(X_train)) * t(X_train) %*% X_train, lambda)
+    }
+    objective = objective / folds
+    print(objective)
+    if (!is.na(objective) && objective < best_obj) {
+      best_obj = objective
+      best_param = param
+    }
   }
- clime1 <- function(p){
- res_clime = cv1(X, clime_train, p)
- return(res_clime) 
+  return(list(param = best_param, obj = best_obj))
 }
-nmcl1 = Nelder_Mead(clime1,0.1, 0.01,0.8)
-clime2 <- function(p){
- res_clime = cv2(X, clime_train, p)
- return(res_clime) 
- }
- nmcl2 = Nelder_Mead(clime2, 0.1, 0.01,0.8)
- #mb
-  mb_train = function(X_train, lambda) {
-    # have symmetrization in our CV objective
-    v = MB(X_train, lambda)
+
+# Equally spaced grid with k + 1 points
+log_grid = function(a, b, k) {
+  return(exp(log(a) + (0:k) * (log(b) - log(a)) / k))
+}
+
+# This may return a list of length < k + 1 due to rounding
+log_grid_discrete = function(a, b, k) {
+  return(unique(round(log_grid(a, b, k))))
+}
+
+
+is.walk_summable = function(M) {
+  N = -abs(M)
+  diag(N) = diag(M)
+  eigs = eigen(N)$values
+  print(eigs)
+  return(!any(eigs < 0))
+}
+
+walk_summable_dist = function(M) {
+  N = -abs(M)
+  diag(N) = diag(M)
+  return(nearPD(N)$normF)
+}
+
+walk_summable_rel = function(M) {
+  return(walk_summable_dist(M) / norm(M, ))
+}
+#glasso
+glasso_train = function(X_train, lambda) {
+    # symmetrization in our CV objective. (doesn't hurt glasso performance)
+    v = glasso((1 / nrow(X_train)) * t(X_train) %*% X_train, lambda)$wi
     return((v + t(v))/2)
   }
- mb1 <- function(p){
- res_mb = cv1(X, mb_train, p)
- return(res_mb) 
-}
-nmmb1 = Nelder_Mead(mb1,0.1, 0.0005, 0.4)
-mb2 <- function(p){
- res_mb = cv2(X, mb_train, p)
- return(res_mb) 
-} 
-nmmb2 = Nelder_Mead(mb2,0.1, 0.0005, 0.4 )
-#hybridmb
- hybrid.mb_train = function(X_train, gamma) {
-    hybrid.MB(X_train, gamma)
-  }
-  hybrid.mb1 <- function(p){
- res_hybrid.mb = cv1(X, hybrid.mb_train, p)
- return(res_hybrid.mb) 
-}
-nmhmb1 = Nelder_Mead(hybrid.mb1, 4,1,32)
-hybrid.mb2 <- function(p){
- res_hybrid.mb = cv2(X, hybrid.mb_train, p)
- return(res_hybrid.mb) 
- }
- nmhmb2 = Nelder_Mead(hybrid.mb2,4,1,32)
- #greedyprune
+#greedy
 greedy_params = list()
-for (k in log_grid_discrete(3,24,6)) {#log_grid_discrete(3, 26, 6)) {
-     for (threshold in log_grid(0.001, 0.1, 7)) {
-         greedy_params = list.append(greedy_params, c(k, threshold))
-     } 
- }
- greedy_train = function(X_train, p) {
-     full_greedy_and_prune(X_train, (1 / nrow(X_train)) * t(X_train) %*% X_train, p[1], p[2])
- }
- nGlobalVar = 0
-   greedy1 <- function(threshold){
-      gp = list()
-    gp = list.append(gp, c(nGlobalVar, threshold))
-     gp = as.numeric(unlist(gp))
-     rs_greedy = cv1(X, greedy_train, gp)
-     return(rs_greedy)
-   }
-   greedylist1 = list()
-  
-   for (outerparam in log_grid_discrete(3,24,6))
-   {nGlobalVar = outerparam
-  
-  nmgreedy1 <- Nelder_Mead(greedy1,0.05, 0.001,0.1)
-  greedylist1 = list.append(greedylist1, c(outerparam, nmgreedy1$par, nmgreedy1$fval))
+  for (k in log_grid_discrete(3,24,6)) {#log_grid_discrete(3, 26, 6)) {
+    for (threshold in log_grid(0.001, 0.1, 7)) {
+      greedy_params = list.append(greedy_params, c(k, threshold))
+   } 
   }
- gl1 = c(greedylist1[[1]][3],greedylist1[[2]][3],greedylist1[[3]][3],greedylist1[[4]][3],greedylist1[[5]][3],greedylist1[[6]][3],greedylist1[[7]][3]) 
- 
- glind1 = which.min(gl1)
- grpr1 = c(greedylist1[[glind1]][1], greedylist1[[glind1]][2])
-  grpr1 = as.list(grpr1)
-  grpr1 = unlist(grpr1)
-  greedy2 <- function(threshold){
-      gp = list()
-    gp = list.append(gp, c(nGlobalVar, threshold))
-     gp = as.numeric(unlist(gp))
-     rs_greedy = cv2(X, greedy_train, gp)
-     return(rs_greedy)
-   }
-   greedylist2 = list()
-  
-   for (outerparam in log_grid_discrete(3,24,6))
-   {nGlobalVar = outerparam
-  
-  nmgreedy2 <- Nelder_Mead(greedy2, 0.05, 0.001,0.1)
-  greedylist2 = list.append(greedylist2, c(outerparam, nmgreedy2$par, nmgreedy2$fval))
+  greedy_train = function(X_train, p) {
+    full_greedy_and_prune(X_train, (1 / nrow(X_train)) * t(X_train) %*% X_train, p[1], p[2])
   }
- gl2 = c(greedylist2[[1]][3],greedylist2[[2]][3],greedylist2[[3]][3],greedylist2[[4]][3],greedylist2[[5]][3],greedylist2[[6]][3],greedylist2[[7]][3]) 
- 
- glind2 = which.min(gl2)
- grpr2 = c(greedylist2[[glind2]][1], greedylist2[[glind2]][2])
-  grpr2 = as.list(grpr2)
-  grpr2 = unlist(grpr2)
- recgl1 = glasso_train(X, nmgl1$par)
- recgl2 = glasso_train(X, nmgl2$par)
- reccl1 = clime_train(X, nmcl1$par)
- reccl2 = clime_train(X, nmcl2$par)
- recmb1 = mb_train(X,nmmb1$par)
- recmb2 = mb_train(X,nmmb2$par)
- rechmb1 =  hybrid.mb_train(X,nmhmb1$par)
- rechmb2 =  hybrid.mb_train(X,nmhmb2$par)
- recgp1 = greedy_train(X, grpr1)
- recgp2 = greedy_train(X, grpr2)
- one.vec = rep(1, 10)
- #glasso1
-top.matgl1 = recgl1%*%one.vec
-bot.valgl1 = as.numeric((t(one.vec)%*%recgl1%*%one.vec))
-m.matgl1 = top.matgl1/bot.valgl1
-#glasso2
-top.matgl2 = recgl2%*%one.vec
-bot.valgl2 = as.numeric((t(one.vec)%*%recgl2%*%one.vec))
-m.matgl2 = top.matgl2/bot.valgl2
-#clime1
-top.matcl1 = reccl1%*%one.vec
-bot.valcl1 = as.numeric((t(one.vec)%*%reccl1%*%one.vec))
-m.matcl1 = top.matcl1/bot.valcl1
-#clime2
-top.matcl2 = reccl2%*%one.vec
-bot.valcl2 = as.numeric((t(one.vec)%*%reccl2%*%one.vec))
-m.matcl2 = top.matcl2/bot.valcl2
-#mb1
-top.matmb1 = recmb1%*%one.vec
-bot.valmb1 = as.numeric((t(one.vec)%*%recmb1%*%one.vec))
-m.matmb1 = top.matmb1/bot.valmb1
-#mb2
-top.matmb2 = recmb2%*%one.vec
-bot.valmb2 = as.numeric((t(one.vec)%*%recmb2%*%one.vec))
-m.matmb2 = top.matmb2/bot.valmb2
-#hmb1
-top.mathmb1 = rechmb1%*%one.vec
-bot.valhmb1 = as.numeric((t(one.vec)%*%rechmb1%*%one.vec))
-m.mathmb1 = top.mathmb1/bot.valhmb1
-#mb2
-top.mathmb2 = rechmb2%*%one.vec
-bot.valhmb2 = as.numeric((t(one.vec)%*%rechmb2%*%one.vec))
-m.mathmb2 = top.matmb2/bot.valhmb2
-#gp1
-top.matgp1 = recgp1%*%one.vec
-bot.valgp1 = as.numeric((t(one.vec)%*%recgp1%*%one.vec))
-m.matgp1 = top.matgp1/bot.valgp1
-#gp2
-top.matgp2 = recgp2%*%one.vec
-bot.valgp2 = as.numeric((t(one.vec)%*%recgp2%*%one.vec))
-m.matgp2 = top.matgp2/bot.valgp2
-#eqwt
-eqwt = rep(1/10,10)
-dgl1 = as.matrix(dmat)%*%as.vector(m.matgl1)
-dcl1 = as.matrix(dmat)%*%as.vector(m.matcl1)
-dmb1 = as.matrix(dmat)%*%as.vector(m.matmb1)
-dhmb1 = as.matrix(dmat)%*%as.vector(m.mathmb1)
-dgp1 = as.matrix(dmat)%*%as.vector(m.matgp1)
-dgl2 = as.matrix(dmat)%*%as.vector(m.matgl2)
-dcl2 = as.matrix(dmat)%*%as.vector(m.matcl2)
-dmb2 = as.matrix(dmat)%*%as.vector(m.matmb2)
-dhmb2 = as.matrix(dmat)%*%as.vector(m.mathmb2)
-dgp2 = as.matrix(dmat)%*%as.vector(m.matgp2)
-deqwt = as.matrix(dmat)%*%as.vector(eqwt)
-vargl1 = var(dgl1)
-varcl1 = var(dcl1)
-varmb1 = var(dmb1)
-varhmb1 = var(dhmb1)
-vargp1 = var(dgp1)
-vargl2 = var(dgl2)
-varcl2 = var(dcl2)
-varmb2 = var(dmb2)
-varhmb2 = var(dhmb2)
-vargp2 = var(dgp2)
-vareqwt = var(deqwt)
-v <- c(vargl1, varcl1, varmb1, varhmb1,vargp1, vargl2, varcl2, varmb2, varhmb2, vargp2, vareqwt)
-return(v)
+niftyret = read.csv("niftyreturns.csv")
+covnif = cov(niftyret)
+precnif = solve(covnif)
+munif = colMeans(niftyret)
+for (i in 101: 200)
+{
+set.seed(i)
+sample_distribution <- mvrnorm(n = 200,
+                               mu = munif, 
+                               Sigma = covnif)
+sample_mat = as.matrix(sample_distribution)
+cov_lw = linshrink_cov(sample_mat)
+prec_lw = solve(cov_lw)
+cov_rb = cov.shrink(sample_mat)
+prec_rb = solve(cov_rb)
+res_glasso = crossvalidate(scale(sample_mat), glasso_train, log_grid(5e-4,0.4,14))
+prec_gl = glasso_train(scale(sample_mat), res_glasso$param)
+res_greedy = crossvalidate(scale(sample_mat), greedy_train, greedy_params)
+prec_gr = greedy_train(scale(sample_mat), res_greedy$param)
+l2_lw = norm(precnif - prec_lw, type = "F")  
+l2_rb = norm(precnif - prec_rb, type = "F") 
+l2_gl = norm(precnif - prec_gl, type = "F") 
+l2_gr = norm(precnif - prec_gr, type = "F") 
+frob_vec = c(l2_lw,l2_rb,l2_gl,l2_gr)
+print(frob_vec)
 }
-TS1 <- zoo(nifret)
-rollvar <- rollapply(TS1, width = 35, dailyvar, by.column = FALSE)
-rollvar
